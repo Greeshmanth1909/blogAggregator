@@ -43,7 +43,9 @@ func main() {
     mux.HandleFunc("GET /v1/healthz", healthHandler)
     mux.HandleFunc("GET /v1/err", errHandler)
     mux.HandleFunc("POST /v1/users", usersHandler)
-    mux.HandleFunc("GET /v1/users", getUsersHandler)
+    mux.Handle("GET /v1/users", authMiddleWare(http.HandlerFunc(getUsersHandler)))
+    mux.Handle("POST /v1/feeds", authMiddleWare(http.HandlerFunc(createFeedHandler)))
+    mux.HandleFunc("GET /v1/feeds", getFeedsHandler)
 
     server.ListenAndServe()
 }
@@ -120,4 +122,57 @@ func getUsersHandler(w http.ResponseWriter, r *http.Request) {
         respondWithError(w, 500, "Internal server Error")
     }
     respondWithJSON(w, 200, user)
+}
+
+func authMiddleWare(handler http.Handler) http.Handler {
+    return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+        api_key := r.Header.Get("Authorization")
+        api_key = strings.TrimPrefix(api_key, "ApiKey ")
+        // make sure the thing exists in the db
+        ctx := context.Background()
+        user, err := apiConf.DB.GetUserByApi(ctx, api_key)
+        ctx = context.WithValue(ctx, "user", user)
+        r = r.WithContext(ctx)
+        if err != nil {
+            respondWithJSON(w, 404, "Invalid api key")
+            return
+        }
+        handler.ServeHTTP(w, r)
+    })
+}
+
+func createFeedHandler(w http.ResponseWriter, r *http.Request) {
+    type feedStruct struct {
+        Name string `json:"name"`
+        Url string `json:"url"`
+    }
+    var body feedStruct
+    decoder := json.NewDecoder(r.Body)
+    decoder.Decode(&body)
+    // add name and url with correnponding user data
+    var feed database.CreateFeedParams
+    feed.ID = uuid.New()
+    feed.CreatedAt = time.Now()
+    feed.UpdatedAt = time.Now()
+    feed.Name = body.Name
+    feed.Url = body.Url
+    user := r.Context().Value("user").(database.User)
+    feed.UserID = user.ID
+    ctx := context.Background()
+    fd, err := apiConf.DB.CreateFeed(ctx, feed)
+    if err != nil {
+        respondWithJSON(w, 500, "Couldn't create feed")
+        return
+    }
+    respondWithJSON(w, 200, fd)
+}
+
+func getFeedsHandler(w http.ResponseWriter, r *http.Request) {
+    ctx := context.Background()
+    dat, err := apiConf.DB.GetAllFeeds(ctx)
+    if err != nil {
+        respondWithError(w, 500, "Internal server error: couldn't query database")
+        return
+    }
+    respondWithJSON(w, 200, dat)
 }
