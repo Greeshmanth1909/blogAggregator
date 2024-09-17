@@ -2,6 +2,7 @@ package main
 
 import (
     "fmt"
+    "context"
     "time"
     "github.com/joho/godotenv"
     "log"
@@ -11,6 +12,7 @@ import (
     "database/sql"
     "github.com/Greeshmanth1909/blogAggregator/internal/database"
     "github.com/google/uuid"
+    "strings"
 )
 import _ "github.com/lib/pq"
 
@@ -30,9 +32,7 @@ func main() {
     }
 
     dbQueries := database.New(db)
-    apiConf := apiConfig{dbQueries}
-
-    fmt.Println(apiConf)
+    apiConf.DB = dbQueries
 
     mux := http.NewServeMux()
 
@@ -43,6 +43,7 @@ func main() {
     mux.HandleFunc("GET /v1/healthz", healthHandler)
     mux.HandleFunc("GET /v1/err", errHandler)
     mux.HandleFunc("POST /v1/users", usersHandler)
+    mux.HandleFunc("GET /v1/users", getUsersHandler)
 
     server.ListenAndServe()
 }
@@ -50,6 +51,7 @@ func main() {
 type apiConfig struct {
 	DB *database.Queries
 }
+var apiConf apiConfig
 
 type user struct {
     Id uuid.UUID `json:"id"`
@@ -94,13 +96,28 @@ func usersHandler(w http.ResponseWriter, r *http.Request) {
     decoder := json.NewDecoder(r.Body)
     decoder.Decode(&req)
 
-    var user user
+    var user database.CreateUserParams
     // create user in db
     id := uuid.New()
-    user.Id = id
-    user.Created_at = time.Now()
-    user.Updated_at = time.Now()
+    user.ID = id
+    user.CreatedAt = time.Now()
+    user.UpdatedAt = time.Now()
     user.Name = req.Name
-    
+    ctx := context.Background()
+    usr, err := apiConf.DB.CreateUser(ctx, user)
+    if err != nil {
+        respondWithError(w, 500, "Internal Server Error")
+    } 
+    respondWithJSON(w, 200, usr)
+}
+
+func getUsersHandler(w http.ResponseWriter, r *http.Request) {
+    api_key := r.Header.Get("Authorization")
+    api_key = strings.TrimPrefix(api_key, "ApiKey ")
+    ctx := context.Background()
+    user, err := apiConf.DB.GetUserByApi(ctx, api_key)
+    if err != nil {
+        respondWithError(w, 500, "Internal server Error")
+    }
     respondWithJSON(w, 200, user)
 }
