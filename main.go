@@ -47,6 +47,8 @@ func main() {
     mux.Handle("POST /v1/feeds", authMiddleWare(http.HandlerFunc(createFeedHandler)))
     mux.HandleFunc("GET /v1/feeds", getFeedsHandler)
     mux.Handle("POST /v1/feed_follows", authMiddleWare(http.HandlerFunc(createFeedFollow)))
+    mux.HandleFunc("DELETE /v1/feed_follows/{feedFollowID}", deleteFeedFollows)
+    mux.Handle("GET /v1/feed_follows", authMiddleWare(http.HandlerFunc(getFeedsByUserId)))
 
     server.ListenAndServe()
 }
@@ -202,4 +204,28 @@ func createFeedFollow(w http.ResponseWriter, r *http.Request) {
     }
     respondWithJSON(w, 200, res)
 
+}
+
+func deleteFeedFollows(w http.ResponseWriter, r *http.Request) {
+    feedFollowId := r.PathValue("feedFollowID")
+    if feedFollowId == "" {
+        respondWithError(w, 402, "Feed Id required")
+        return
+    }
+    uid, _ := uuid.Parse(feedFollowId)
+    // delete feed follows
+    ctx := context.Background()
+    apiConf.DB.DeleteFeed(ctx, uid)
+    respondWithJSON(w, 200, "DONE")
+}
+
+func getFeedsByUserId(w http.ResponseWriter, r *http.Request) {
+    user := r.Context().Value("user").(database.User)
+    ctx := context.Background()
+    res, err := apiConf.DB.GetAllFeedsUser(ctx, user.ID)
+    if err != nil {
+        respondWithError(w, 500, "Internal Server Error: Couldn't Update the DataBase")
+        return
+    }
+    respondWithJSON(w, 200, res)
 }
