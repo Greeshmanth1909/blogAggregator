@@ -163,11 +163,26 @@ func createFeedHandler(w http.ResponseWriter, r *http.Request) {
     feed.UserID = user.ID
     ctx := context.Background()
     fd, err := apiConf.DB.CreateFeed(ctx, feed)
+
+    // Create the feedFollow at the same time
+    var params database.AddFeedFollowParams
+    params.ID = uuid.New()
+    params.FeedID = feed.ID
+    params.UserID = feed.UserID
+    params.CreatedAt = time.Now()
+    params.UpdatedAt = time.Now()
+    res, _ := apiConf.DB.AddFeedFollow(ctx, params)
+    
+    responseBody := struct{
+        Feed database.Feed `json:"feed"`
+        FeedFollow database.FeedFollow `json"feed_follow"`
+    } {fd, res}
+
     if err != nil {
         respondWithJSON(w, 500, "Couldn't create feed")
         return
     }
-    respondWithJSON(w, 200, fd)
+    respondWithJSON(w, 200, responseBody)
 }
 
 func getFeedsHandler(w http.ResponseWriter, r *http.Request) {
