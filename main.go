@@ -46,6 +46,7 @@ func main() {
     mux.Handle("GET /v1/users", authMiddleWare(http.HandlerFunc(getUsersHandler)))
     mux.Handle("POST /v1/feeds", authMiddleWare(http.HandlerFunc(createFeedHandler)))
     mux.HandleFunc("GET /v1/feeds", getFeedsHandler)
+    mux.Handle("POST /v1/feed_follows", authMiddleWare(http.HandlerFunc(createFeedFollow)))
 
     server.ListenAndServe()
 }
@@ -175,4 +176,30 @@ func getFeedsHandler(w http.ResponseWriter, r *http.Request) {
         return
     }
     respondWithJSON(w, 200, dat)
+}
+
+func createFeedFollow(w http.ResponseWriter, r *http.Request) {
+    type body struct{
+        Feed_id string `json:"feed_id"`
+    }
+    var reqBody body
+    decoder := json.NewDecoder(r.Body)
+    decoder.Decode(&reqBody)
+    user := r.Context().Value("user").(database.User)
+
+    var params database.AddFeedFollowParams
+    params.ID = uuid.New()
+    params.FeedID, _ = uuid.Parse(reqBody.Feed_id)
+    params.UserID = user.ID
+    params.CreatedAt = time.Now()
+    params.UpdatedAt = time.Now()
+    
+    ctx := context.Background()
+    res, err := apiConf.DB.AddFeedFollow(ctx, params)
+    if err != nil {
+        respondWithError(w, 500, "Server Error: couldn't update database")
+        return
+    }
+    respondWithJSON(w, 200, res)
+
 }
