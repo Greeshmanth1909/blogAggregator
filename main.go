@@ -11,6 +11,7 @@ import (
     "encoding/json"
     "database/sql"
     "github.com/Greeshmanth1909/blogAggregator/internal/database"
+    "github.com/Greeshmanth1909/blogAggregator/mapping"
     "github.com/google/uuid"
     "strings"
 )
@@ -164,6 +165,7 @@ func createFeedHandler(w http.ResponseWriter, r *http.Request) {
     ctx := context.Background()
     fd, err := apiConf.DB.CreateFeed(ctx, feed)
 
+    fdRes := mapping.DatabaseFeedToResponseFeed(fd)
     // Create the feedFollow at the same time
     var params database.AddFeedFollowParams
     params.ID = uuid.New()
@@ -174,9 +176,9 @@ func createFeedHandler(w http.ResponseWriter, r *http.Request) {
     res, _ := apiConf.DB.AddFeedFollow(ctx, params)
     
     responseBody := struct{
-        Feed database.Feed `json:"feed"`
+        Feed mapping.FeedResponse `json:"feed"`
         FeedFollow database.FeedFollow `json"feed_follow"`
-    } {fd, res}
+    } {fdRes, res}
 
     if err != nil {
         respondWithJSON(w, 500, "Couldn't create feed")
@@ -188,11 +190,15 @@ func createFeedHandler(w http.ResponseWriter, r *http.Request) {
 func getFeedsHandler(w http.ResponseWriter, r *http.Request) {
     ctx := context.Background()
     dat, err := apiConf.DB.GetAllFeeds(ctx)
+    var responseSlice []mapping.FeedResponse
+    for _, val := range dat {
+        responseSlice = append(responseSlice, mapping.DatabaseFeedToResponseFeed(val))
+    }
     if err != nil {
         respondWithError(w, 500, "Internal server error: couldn't query database")
         return
     }
-    respondWithJSON(w, 200, dat)
+    respondWithJSON(w, 200, responseSlice)
 }
 
 func createFeedFollow(w http.ResponseWriter, r *http.Request) {
